@@ -295,7 +295,6 @@ if [[ $gifski != n ]]; then
     if [[ $gifski = video ]]; then
         _check=("$LOCALDESTDIR"/opt/gifskiffmpeg/lib/pkgconfig/lib{av{codec,device,filter,format,util},swscale}.pc)
         if flavor=gifski do_vcs "https://git.ffmpeg.org/ffmpeg.git#branch=release/6.1"; then
-            do_patch "https://raw.githubusercontent.com/Jsoeph192/gifski-patch/fix_ffmpeg_fps.patch"
             do_uninstall "$LOCALDESTDIR"/opt/gifskiffmpeg
             [[ -f config.mak ]] && log "distclean" make distclean
             create_build_dir gifski
@@ -2487,7 +2486,11 @@ if [[ $ffmpeg != no ]]; then
         enabled libsvtvp9 || do_removeOption FFMPEG_OPTS_SHARED "--enable-libsvtvp9"
         if enabled libdvdcss; then
             do_pacman_install libdvdcss
-            do_addOption --enable-libdvdcss --enable-libdvdcss-protocol
+            do_addOption "--enable-libdvdcss"
+            do_addOption "--enable-libdvdread"
+            do_addOption "--enable-libdvdnav"
+            do_addOption "--enable-protocol=dvd"
+            do_addOption "--enable-demuxer=dvd"
         fi
         
         enabled libvvdec && grep_and_sed FF_PROFILE libavcodec/libvvdec.c 's/FF_PROFILE/AV_PROFILE/g'
