@@ -1,11 +1,12 @@
 ---
-name: 'Generic/Suite bug report'
-about: 'Generic/Suite bug report'
+name: Generic/Suite bug report
+about: Generic/Suite bug report
 title: ''
-labels: 'Bug Report'
+labels: ''
 assignees: ''
 
 ---
+
 <!---
 If you use the built-in options and it's broken because of a lib you didn't even
 know existed or will never use, please choose your own libs and avoid creating
