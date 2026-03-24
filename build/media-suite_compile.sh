@@ -1447,7 +1447,7 @@ if { { [[ $ffmpeg != no ]] &&
 fi
 
 _check=(libdvdread.a dvdread.pc)
-if { { [[ $ffmpeg != no ]] && enabled_any libdvdread libdvdnav; } ||
+if { { [[ $ffmpeg != no ]] && enabled_any libdvdread libdvdnav libdvdcss; } ||
     [[ $mplayer = y ]] || mpv_enabled dvdnav; } &&
     do_vcs "$SOURCE_REPO_LIBDVDREAD" dvdread; then
     do_uninstall include/dvdread "${_check[@]}"
@@ -1460,10 +1460,19 @@ fi
 
 _check=(libdvdnav.a dvdnav.pc)
 _deps=(libdvdread.a)
-if { { [[ $ffmpeg != no ]] && enabled libdvdnav; } ||
+if { { [[ $ffmpeg != no ]] && enabled_any libdvdnav libdvdcss; } ||
     [[ $mplayer = y ]] || mpv_enabled dvdnav; } &&
     do_vcs "$SOURCE_REPO_LIBDVDNAV" dvdnav; then
     do_uninstall include/dvdnav "${_check[@]}"
+    do_mesoninstall
+    do_checkIfExist
+fi
+
+_check=(libdvdcss.a libdvdcss.pc)
+if { { [[ $ffmpeg != no ]] && enabled_any libdvdread libdvdnav libdvdcss; } ||
+    [[ $mplayer = y ]] || mpv_enabled dvdcss; } &&
+    do_vcs "$SOURCE_REPO_LIBDVDCSS" dvdcss; then
+    do_uninstall include/dvdcss "${_check[@]}"
     do_mesoninstall
     do_checkIfExist
 fi
@@ -1612,11 +1621,6 @@ if [[ $hdr10plustool = y ]] &&
     do_checkIfExist
 fi
 
-[[ $ffmpeg != no ]] && enabled libdvdcss && do_pacman_install libdvdcss
-
-if [[ $standalone = y || $ffmpeg != no ]]; then
-    enabled libdvdcss && do_pacman_install libdvdcss
-fi
 
 if [[ $mediainfo = y ]]; then
     [[ $curl = openssl ]] && hide_libressl
