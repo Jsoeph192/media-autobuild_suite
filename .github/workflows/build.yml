@@ -1,0 +1,136 @@
+name: Build Media Suite Video Binaries
+
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    - cron: '0 3 * * 1'  # Weekly on Mondays at 3 AM UTC
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up PowerShell execution policy
+      run: |
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+
+    - name: Run media-autobuild_suite.bat with completion monitoring
+      shell: powershell
+      run: |
+        Write-Output "Starting build at $(Get-Date)"
+        
+        # Start the batch file in background (it's in the root of the repo)
+        Start-Process -FilePath ".\media-autobuild_suite.bat" -PassThru
+        
+        # Monitor for completion by checking file count in local64/bin-video
+        # Wait up to 4 hours for the build to complete
+        $timeout = New-TimeSpan -Hours 4
+        $sw = [diagnostics.stopwatch]::StartNew()
+        $buildComplete = $false
+        
+        while ($sw.elapsed -lt $timeout -and -not $buildComplete) {
+            Write-Output "Monitoring build progress... Elapsed time: $($sw.Elapsed.ToString('hh\:mm\:ss'))"
+            
+            # Check if local64/bin-video directory exists and has sufficient files
+            if (Test-Path "local64/bin-video") {
+                $fileCount = (Get-ChildItem -Path "local64/bin-video" -File -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+                Write-Output "Found $fileCount video files in local64/bin-video"
+                
+                if ($fileCount -gt 5) {
+                    Write-Output "Found more than 5 files, waiting additional time to ensure completion..."
+                    # Wait a bit more to ensure all windows/processes are done
+                    Start-Sleep -Seconds 300  # 5 minutes extra
+                    $buildComplete = $true
+                    Write-Output "Build completion criteria met at $(Get-Date)"
+                }
+            }
+            
+            # Check every 2 minutes
+            Start-Sleep -Seconds 120
+        }
+        
+        if ($buildComplete) {
+            Write-Output "Build successfully completed at $(Get-Date)"
+        } else {
+            Write-Output "Timeout reached or build did not meet completion criteria"
+            # Still continue to try to collect whatever was built
+        }
+        
+        Write-Output "Final verification wait..."
+        Start-Sleep -Seconds 60
+
+    - name: Verify and collect video binaries
+      run: |
+        Write-Output "Verifying final build results..."
+        
+        # Check final file count
+        if (Test-Path "local64/bin-video") {
+            $finalFileCount = (Get-ChildItem -Path "local64/bin-video" -File -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+            Write-Output "Final video file count: $finalFileCount"
+            
+            if ($finalFileCount -gt 0) {
+                Write-Output "Copying video binaries..."
+                # Create clean directory for artifacts
+                New-Item -ItemType Directory -Path video-binaries -Force
+                
+                # Copy all video binaries
+                Copy-Item -Path "local64/bin-video/*" -Destination video-binaries/ -Recurse -Force
+                
+                # List copied files
+                Write-Output "Copied video files:"
+                Get-ChildItem -Path video-binaries/ -Recurse | ForEach-Object { Write-Output $_.Name }
+            } else {
+                Write-Output "No video files found to copy"
+                exit 1
+            }
+        } else {
+            Write-Output "bin-video directory not found"
+            exit 1
+        }
+
+    - name: Create timestamp tag
+      id: tag
+      run: |
+        echo "tag_name=$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.tag_name }}
+        release_name: Media Suite Video Binaries - ${{ steps.tag.outputs.tag_name }}
+        draft: false
+        prerelease: false
+        body: |
+          Automated build of media-autobuild_suite video binaries
+          Build completed at: $(date -u)
+          Files included: Video processing tools and libraries
+          
+          This release contains binaries from the bin-video directory.
+
+    - name: Create and upload archive
+      run: |
+        # Create ZIP archive of the video binaries
+        Compress-Archive -Path video-binaries/* -DestinationPath video-binaries-${{ steps.tag.outputs.tag_name }}.zip
+        Write-Output "Created archive: video-binaries-${{ steps.tag.outputs.tag_name }}.zip"
+
+    - name: Upload final release asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./video-binaries-${{ steps.tag.outputs.tag_name }}.zip
+        asset_name: video-binaries-${{ steps.tag.outputs.tag_name }}.zip
+        asset_content_type: application/zip
+
+    - name: Upload artifacts as backup
+      uses: actions/upload-artifact@v4
+      with:
+        name: video-binaries-${{ steps.tag.outputs.tag_name }}
+        path: ./video-binaries/
