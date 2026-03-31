@@ -235,6 +235,7 @@ For information about the compiler environment see the wiki, there you also have
 ## Information
 
 --------
+This tool was originally from <https://github.com/m-ab-s/media-autobuild_suite> and, in order to maintain a fork, I would need to create a pull request for every file (useless) so the repository is now standalone, but all credit goes to @m-ab-s
 
 This tool is inspired by the very nice, linux cross-compiling tool from Roger Pack (rdp):
 <https://github.com/rdp/ffmpeg-windows-build-helpers>
