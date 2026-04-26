@@ -763,7 +763,8 @@ if [[ $ffmpeg != no || $standalone = y ]] && enabled libtesseract; then
         do_uninstall include/tesseract "${_check[@]}"
         sed -i 's|Requires.private.*|& libarchive iconv libtiff-4 zlib|' tesseract.pc.in
         grep_or_sed ws2_32 "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc" 's;Libs.private:.*;& -lws2_32;g'
-         # Fixup some __imp_zlib related symbols, but in libz.a.
+        grep_or_sed crypt32 "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc" 's;Libs.private:.*;& -lcrypt32;g'
+		 # Fixup some __imp_zlib related symbols, but in libz.a.
         fix_impsyms "$MINGW_PREFIX/lib/libarchive.a" libarchive
 		case $CC in
         *clang) sed -i -e 's|Libs.private.*|& -fopenmp=libomp|' tesseract.pc.in ;;
@@ -2184,10 +2185,10 @@ if [[ $bits = 64bit && $vvc = y ]] &&
     unset _notrequired
 fi
 
-_check=(bin-video/uvg266.exe libuvg266.a uvg266.pc uvg266.h)
+_check=(bin-video/uvg266.exe libuvg266.a uvg266.pc uvg266/uvg266.h)
 if [[ $bits = 64bit && $uvg266 = y ]] &&
     do_vcs "$SOURCE_REPO_UVG266"; then
-    do_uninstall version.h "${_check[@]}"
+    do_uninstall include/uvg266 "${_check[@]}"
     do_cmakeinstall video -DBUILD_TESTING=OFF
     do_checkIfExist
 fi
