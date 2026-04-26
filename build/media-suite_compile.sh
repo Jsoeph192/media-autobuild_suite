@@ -246,7 +246,7 @@ else
             sed -e 's;libz_rs;libz;' -e 's;z_rs;z;' -i Cargo.toml
             PKG_CONFIG="$LOCALDESTDIR/bin/ab-pkg-config-static.bat" \
                 log "rust.capi" cargo capi build \
-                --release --jobs "$cpuCount" --prefix="$LOCALDESTDIR"
+                --release --jobs "$cpuCount" --prefix="$LOCALDESTDIR" -F gz
             do_install "target/$CARCH-pc-windows-gnu$rust_target_suffix/release/libz.a" libz.a
             do_install "target/$CARCH-pc-windows-gnu$rust_target_suffix/release/libz.pc" zlib.pc
             do_checkIfExist
@@ -663,7 +663,8 @@ if [[ $ffmpeg != no || $standalone = y ]] && enabled libwebp; then
         else
             extracommands+=(-DWEBP_BUILD_{{C,D,GIF2,IMG2,V}WEBP,ANIM_UTILS,WEBPMUX}"=OFF")
         fi
-        CFLAGS+=" -DFREEGLUT_STATIC" \
+        CFLAGS+=" -DFREEGLUT_STATIC $($PKG_CONFIG --cflags zlib)" \
+            LDFLAGS+=" $($PKG_CONFIG --libs zlib)" \
             do_cmakeinstall global -DWEBP_ENABLE_SWAP_16BIT_CSP=ON "${extracommands[@]}"
         do_checkIfExist
         unset extracommands
@@ -689,7 +690,8 @@ if [[ $jpegxl = y ]] || { [[ $ffmpeg != no ]] && enabled libjxl; }; then
         do_uninstall "${_check[@]}" include/jxl bin-global/cjpegli.exe bin-global/djpegli.exe 
         extracommands=()
         [[ $jpegxl = y ]] || extracommands=("-DJPEGXL_ENABLE_TOOLS=OFF")
-        CXXFLAGS+=" -DJXL_CMS_STATIC_DEFINE -DJXL_STATIC_DEFINE -DJXL_THREADS_STATIC_DEFINE" \
+        CXXFLAGS+=" -DJXL_CMS_STATIC_DEFINE -DJXL_STATIC_DEFINE -DJXL_THREADS_STATIC_DEFINE $($PKG_CONFIG --cflags zlib)" \
+            LDFLAGS+=" $($PKG_CONFIG --libs zlib)" \
             do_cmakeinstall global -D{BUILD_TESTING,JPEGXL_ENABLE_{BENCHMARK,DOXYGEN,MANPAGES,OPENEXR,SKCMS,EXAMPLES,JPEGLI}}=OFF \
             -DJPEGXL_{FORCE_SYSTEM_{BROTLI,LCMS2},STATIC}=ON "${extracommands[@]}"
         do_checkIfExist
@@ -756,23 +758,21 @@ if [[ $ffmpeg != no || $standalone = y ]] && enabled libtesseract; then
     _check=(libtesseract.{,l}a tesseract.pc)
     if do_vcs "$SOURCE_REPO_TESSERACT"; then
         do_pacman_install docbook-xsl omp
-        # Reverts a commit that breaks the pkgconfig file
-        {
-            git revert --no-edit b4a4f5c || git revert --abort
-        } > /dev/null 2>&1
         do_autogen
         _check+=(bin-global/tesseract.exe)
         do_uninstall include/tesseract "${_check[@]}"
-        sed -i 's|Requires.private.*|& libarchive iconv libtiff-4|' tesseract.pc.in
+        sed -i 's|Requires.private.*|& libarchive iconv libtiff-4 zlib|' tesseract.pc.in
         grep_or_sed ws2_32 "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc" 's;Libs.private:.*;& -lws2_32;g'
-        case $CC in
+         # Fixup some __imp_zlib related symbols, but in libz.a.
+        fix_impsyms "$MINGW_PREFIX/lib/libarchive.a" libarchive
+		case $CC in
         *clang) sed -i -e 's|Libs.private.*|& -fopenmp=libomp|' tesseract.pc.in ;;
         *) sed -i -e 's|Libs.private.*|& -fopenmp -lgomp|' tesseract.pc.in ;;
         esac
         do_separate_confmakeinstall global --disable-{graphics,tessdata-prefix} \
             --without-curl \
             LIBLEPT_HEADERSDIR="$LOCALDESTDIR/include" \
-            LIBS="$($PKG_CONFIG --libs iconv lept libtiff-4)" --datadir="$LOCALDESTDIR/bin-global"
+            LIBS="$($PKG_CONFIG --libs iconv lept libtiff-4 libarchive)" --datadir="$LOCALDESTDIR/bin-global"
         if [[ ! -f $LOCALDESTDIR/bin-global/tessdata/eng.traineddata ]]; then
             do_pacman_install tesseract-data-eng
             mkdir -p "$LOCALDESTDIR"/bin-global/tessdata
@@ -1063,6 +1063,10 @@ if [[ $ffmpeg != no ]] && enabled libgme &&
     do_vcs "$SOURCE_REPO_LIBGME"; then
     do_uninstall include/gme "${_check[@]}"
     do_cmakeinstall -DENABLE_UBSAN=OFF
+	grep_and_sed '-lz' "$LOCALDESTDIR/lib/pkgconfig/libgme.pc" \
+        '/Version:/a\
+Requires: zlib
+s|[[:blank:]]*-lz||'
     do_checkIfExist
 fi
 
@@ -1697,6 +1701,7 @@ fi
 if [[ $ffmpeg != no ]] && enabled_any frei0r ladspa; then
     _check=(libdl.a dlfcn.h)
     if do_vcs "$SOURCE_REPO_DLFCN"; then
+		do_patch "https://github.com/dyne/frei0r/pull/274.patch" am
         do_uninstall "${_check[@]}"
         do_cmakeinstall
         do_checkIfExist
@@ -2394,6 +2399,8 @@ if [[ $ffmpeg != no ]]; then
     fi
     enabled libtheora && do_pacman_install libtheora
     enabled libcaca && do_addOption --extra-cflags=-DCACA_STATIC && do_pacman_install libcaca
+	grep_and_sed '-lz' "$MINGW_PREFIX"/lib/pkgconfig/caca.pc \
+        '/Requires:/s|[[:blank:]]*$| zlib|;s|[[:blank:]]+-lz||'
     enabled libmodplug && do_addOption --extra-cflags=-DMODPLUG_STATIC && do_pacman_install libmodplug
     enabled libopenjpeg && do_pacman_install openjpeg2
     if enabled libopenh264; then
