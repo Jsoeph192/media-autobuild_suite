@@ -637,6 +637,9 @@ if { { [[ $ffmpeg != no || $standalone = y ]] && enabled libtesseract; } ||
         else
             extracommands+=("-Dtiff-tools=OFF")
         fi
+		sed -i 's;message(FATAL_ERROR "The imported target;message(WARNING "The imported target;' \
+        "$MINGW_PREFIX"/lib/cmake/libjpeg-turbo/libjpeg-turboTargets.cmake
+        sed -ri 's/libjpeg-turbo::(|turbo)jpeg/&-static/' cmake/JPEGCodec.cmake
         grep_or_sed 'Requires.private' libtiff-4.pc.in \
             '/Libs:/ a\Requires.private: libjpeg liblzma zlib libzstd glut'
         CFLAGS+=" -DFREEGLUT_STATIC" \
@@ -764,6 +767,19 @@ if [[ $ffmpeg != no || $standalone = y ]] && enabled libtesseract; then
         sed -i 's|Requires.private.*|& libarchive iconv libtiff-4 zlib|' tesseract.pc.in
         grep_or_sed ws2_32 "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc" 's;Libs.private:.*;& -lws2_32;g'
         grep_or_sed crypt32 "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc" 's;Libs.private:.*;& -lcrypt32;g'
+		# Replace the manual -l flags with proper requirements
+        grep_and_sed '-lz([[:space:]]+|$)' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-lz([[:space:]]+|$); ;g;s;Requires.private:.*;& zlib;g'
+        grep_and_sed '-lbz2 ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-lbz2([[:space:]]+|$); ;g;s;Requires.private:.*;& bzip2;g'
+        grep_and_sed '-llzma ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-llzma([[:space:]]+|$); ;g;s;Requires.private:.*;& liblzma;g'
+        grep_and_sed '-lb2 ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-lb2([[:space:]]+|$); ;g;s;Requires.private:.*;& libb2;g'
+        grep_and_sed '-llz4 ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-llz4([[:space:]]+|$); ;g;s;Requires.private:.*;& liblz4;g'
+        grep_and_sed '-lzstd ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-lzstd([[:space:]]+|$); ;g;s;Requires.private:.*;& libzstd;g'
+        grep_and_sed '-lcrypto ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-lcrypto([[:space:]]+|$); ;g;s;Requires.private:.*;& libcrypto;g'
+        grep_and_sed '-liconv ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-liconv([[:space:]]+|$); ;g;s;Requires.private:.*;& iconv;g'
+        grep_and_sed '-lexpat ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-lexpat([[:space:]]+|$); ;g;s;Requires.private:.*;& expat;g'
+        grep_and_sed '-lpcre2-posix ' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-lpcre2-posix([[:space:]]+|$); ;g;s;Requires.private:.*;& libpcre2-posix;g'
+        grep_and_sed '-lssl' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"  's;[[:space:]]+-lssl([[:space:]]+|$); ;g;s;Requires.private:.*;& libssl;g'
+        sed -Ei 's;[[:space:]]+; ;g' "$MINGW_PREFIX/lib/pkgconfig/libarchive.pc"
 		 # Fixup some __imp_zlib related symbols, but in libz.a.
         fix_impsyms "$MINGW_PREFIX/lib/libarchive.a" libarchive
 		case $CC in
@@ -1300,6 +1316,7 @@ _check=(libvmaf.{a,pc} libvmaf/libvmaf.h)
 if [[ $ffmpeg != no ]] && enabled libvmaf &&
     do_vcs "$SOURCE_REPO_LIBVMAF"; then
     do_uninstall share/model "${_check[@]}"
+	do_patch "https://github.com/Netflix/vmaf/pull/1495.patch" am
     do_pacman_install -m vim # for built_in_models
     cd_safe libvmaf
     CFLAGS="-msse2 -mfpmath=sse -mstackrealign $CFLAGS" do_mesoninstall video \
@@ -2189,7 +2206,9 @@ _check=(bin-video/uvg266.exe libuvg266.a uvg266.pc uvg266/uvg266.h)
 if [[ $bits = 64bit && $uvg266 = y ]] &&
     do_vcs "$SOURCE_REPO_UVG266"; then
     do_uninstall include/uvg266 "${_check[@]}"
-    do_cmakeinstall video -DBUILD_TESTING=OFF
+    grep_or_sed __MINGW32__ src/uvg266.h 's;UVG_STATIC_LIB.*;& || defined(__MINGW32__);'
+    # -DBUILD_SHARED_LIBS is now ignored, have to set it manually
+    do_cmakeinstall video -DUVG_BUILD_TESTS=OFF -DUVG_BUILD_SHARED=OFF -DUVG_BUILD_STATIC=on
     do_checkIfExist
 fi
 
